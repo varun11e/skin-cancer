@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    <!-- Primary Meta Tags -->
+    <title>Admin Dashboard - Skin Disease Classifier</title>
+    <meta name="title" content="Admin Dashboard - Skin Disease Classifier">
+    <meta name="description"
+        content="Admin dashboard for monitoring skin disease classification predictions and analytics.">
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#667eea">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --success-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            --warning-gradient: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%);
+            --danger-gradient: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+            --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --dark-bg: #0f0f23;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--dark-bg);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .background-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: var(--dark-bg);
+            overflow: hidden;
+        }
+
+        .background-animation::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 20% 80%, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(240, 147, 251, 0.1) 0%, transparent 40%);
+            animation: float 30s ease-in-out infinite;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+
+            33% {
+                transform: translate(30px, -30px) rotate(5deg);
+            }
+
+            66% {
+                transform: translate(-20px, 20px) rotate(-5deg);
+            }
+        }
+
+        /* Dashboard Container */
+        .dashboard-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+
+        /* Header */
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-left h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .header-left p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-glass {
+            background: var(--glass-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-glass:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Tab Navigation */
+        .tab-navigation {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn:hover,
+        .tab-btn.active {
+            background: var(--primary-gradient);
+            color: white;
+            border-color: transparent;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(102, 126, 234, 0.5);
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.2);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+        }
+
+        .stat-card.total::before {
+            background: var(--primary-gradient);
+        }
+
+        .stat-card.normal::before {
+            background: var(--success-gradient);
+        }
+
+        .stat-card.psoriasis::before {
+            background: var(--warning-gradient);
+        }
+
+        .stat-card.ringworm::before {
+            background: var(--danger-gradient);
+        }
+
+        .stat-card.acne::before {
+            background: var(--info-gradient);
+        }
+
+        .stat-card.patients::before {
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+        }
+
+        .stat-card.hospitals::before {
+            background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 15px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 5px;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-card.normal .stat-value {
+            color: #38ef7d;
+            -webkit-text-fill-color: #38ef7d;
+        }
+
+        .stat-card.psoriasis .stat-value {
+            color: #f2c94c;
+            -webkit-text-fill-color: #f2c94c;
+        }
+
+        .stat-card.ringworm .stat-value {
+            color: #f45c43;
+            -webkit-text-fill-color: #f45c43;
+        }
+
+        .stat-card.acne .stat-value {
+            color: #4facfe;
+            -webkit-text-fill-color: #4facfe;
+        }
+
+        .stat-card.patients .stat-value {
+            color: #a855f7;
+            -webkit-text-fill-color: #a855f7;
+        }
+
+        .stat-card.hospitals .stat-value {
+            color: #06b6d4;
+            -webkit-text-fill-color: #06b6d4;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        /* Charts Section */
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .chart-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+        }
+
+        .chart-card h3 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 280px;
+        }
+
+        /* Section Cards */
+        .section-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            margin-bottom: 30px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .section-header h3 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px 20px;
+        }
+
+        .search-box input {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 0.95rem;
+            outline: none;
+            width: 180px;
+        }
+
+        .search-box input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 15px;
+            text-align: left;
+        }
+
+        .data-table th {
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table tbody tr {
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.normal {
+            background: rgba(56, 239, 125, 0.2);
+            color: #38ef7d;
+        }
+
+        .badge.psoriasis {
+            background: rgba(242, 201, 76, 0.2);
+            color: #f2c94c;
+        }
+
+        .badge.ringworm {
+            background: rgba(244, 92, 67, 0.2);
+            color: #f45c43;
+        }
+
+        .badge.acne {
+            background: rgba(79, 172, 254, 0.2);
+            color: #4facfe;
+        }
+
+        .badge.male {
+            background: rgba(79, 172, 254, 0.2);
+            color: #4facfe;
+        }
+
+        .badge.female {
+            background: rgba(236, 72, 153, 0.2);
+            color: #ec4899;
+        }
+
+        .badge.available {
+            background: rgba(56, 239, 125, 0.2);
+            color: #38ef7d;
+        }
+
+        /* Hospital Cards */
+        .hospitals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .hospital-card {
+            background: var(--glass-bg);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .hospital-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .hospital-card h4 {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            color: white;
+        }
+
+        .hospital-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+
+        .hospital-card .rating {
+            color: #f2c94c;
+            font-weight: 600;
+        }
+
+        .hospital-card .contact-info {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .hospital-card .contact-info a {
+            color: #4facfe;
+            text-decoration: none;
+        }
+
+        /* Confidence Bar */
+        .confidence-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .confidence-bar {
+            width: 100px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            border-radius: 10px;
+            background: var(--primary-gradient);
+        }
+
+        .confidence-text {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+        }
+
+        .empty-state-icon {
+            font-size: 3.5rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .empty-state h4 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state p {
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        /* Footer */
+        .dashboard-footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .dashboard-footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 15px;
+            }
+
+            .header-left h1 {
+                font-size: 1.8rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-value {
+                font-size: 2rem;
+            }
+
+            .search-box input {
+                width: 120px;
+            }
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .stat-card,
+        .chart-card,
+        .section-card {
+            animation: slideIn 0.5s ease forwards;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 15px 25px;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            border-left: 4px solid #38ef7d;
+        }
+
+        .toast.error {
+            border-left: 4px solid #f45c43;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-animation"></div>
+
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-left">
+                <h1>📊 Analytics Dashboard</h1>
+                <p>Monitor predictions, patients & hospitals</p>
+            </div>
+            <div class="header-right">
+                <button class="btn btn-glass" onclick="refreshData()">
+                    🔄 Refresh
+                </button>
+                <a href="/" class="btn btn-primary">
+                    🏥 Back to Classifier
+                </a>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-navigation">
+            <button class="tab-btn active" onclick="showTab('overview')">📈 Overview</button>
+            <button class="tab-btn" onclick="showTab('predictions')">🔍 Predictions</button>
+            <button class="tab-btn" onclick="showTab('patients')">👥 Patients</button>
+            <button class="tab-btn" onclick="showTab('hospitals')">🏥 Hospitals</button>
+        </nav>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <!-- Stats Grid -->
+            <section class="stats-grid">
+                <div class="stat-card total">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-value" id="totalPredictions">{{ stats.total }}</div>
+                    <div class="stat-label">Total Predictions</div>
+                </div>
+                <div class="stat-card patients">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-value">{{ stats.patients_count|default(0) }}</div>
+                    <div class="stat-label">Registered Patients</div>
+                </div>
+                <div class="stat-card hospitals">
+                    <div class="stat-icon">🏥</div>
+                    <div class="stat-value">{{ stats.hospitals_count|default(0) }}</div>
+                    <div class="stat-label">Hospitals</div>
+                </div>
+                <div class="stat-card normal">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-value">{{ stats.normal }}</div>
+                    <div class="stat-label">Normal Skin</div>
+                </div>
+                <div class="stat-card psoriasis">
+                    <div class="stat-icon">🔶</div>
+                    <div class="stat-value">{{ stats.psoriasis }}</div>
+                    <div class="stat-label">Psoriasis</div>
+                </div>
+                <div class="stat-card ringworm">
+                    <div class="stat-icon">🔴</div>
+                    <div class="stat-value">{{ stats.ringworm }}</div>
+                    <div class="stat-label">Ringworm</div>
+                </div>
+                <div class="stat-card acne">
+                    <div class="stat-icon">🔵</div>
+                    <div class="stat-value">{{ stats.acne }}</div>
+                    <div class="stat-label">Acne</div>
+                </div>
+            </section>
+
+            <!-- Charts Section -->
+            <section class="charts-section">
+                <div class="chart-card">
+                    <h3>📊 Condition Distribution</h3>
+                    <div class="chart-container">
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3>📈 Predictions Over Time</h3>
+                    <div class="chart-container">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Predictions Tab -->
+        <div id="predictions" class="tab-content">
+            <section class="section-card">
+                <div class="section-header">
+                    <h3>🕐 Recent Predictions</h3>
+                    <div class="search-box">
+                        <span>🔍</span>
+                        <input type="text" placeholder="Search..." id="searchPredictions"
+                            onkeyup="filterTable('predictionsTable', this.value)">
+                    </div>
+                </div>
+                <div class="table-container">
+                    {% if predictions and predictions|length > 0 %}
+                    <table class="data-table" id="predictionsTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Patient</th>
+                                <th>Prediction</th>
+                                <th>Confidence</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pred in predictions %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ pred.patient.name if pred.patient else 'Anonymous' }}</td>
+                                <td>
+                                    <span
+                                        class="badge {{ pred.prediction|lower|replace('_', '')|replace('normal_skin', 'normal') }}">
+                                        {{ pred.prediction }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="confidence-wrapper">
+                                        <div class="confidence-bar">
+                                            <div class="confidence-fill" style="width: {{ pred.confidence }}%"></div>
+                                        </div>
+                                        <span class="confidence-text">{{ "%.1f"|format(pred.confidence) }}%</span>
+                                    </div>
+                                </td>
+                                <td>{{ pred.timestamp }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <h4>No predictions yet</h4>
+                        <p>Start analyzing skin images to see predictions here</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+
+        <!-- Patients Tab -->
+        <div id="patients" class="tab-content">
+            <section class="section-card">
+                <div class="section-header">
+                    <h3>👥 Registered Patients</h3>
+                    <div class="search-box">
+                        <span>🔍</span>
+                        <input type="text" placeholder="Search patients..." id="searchPatients"
+                            onkeyup="filterTable('patientsTable', this.value)">
+                    </div>
+                </div>
+                <div class="table-container">
+                    {% if patients and patients|length > 0 %}
+                    <table class="data-table" id="patientsTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Age</th>
+                                <th>Gender</th>
+                                <th>Phone</th>
+                                <th>Email</th>
+                                <th>City</th>
+                                <th>Last Visit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for patient in patients %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td><strong>{{ patient.name }}</strong></td>
+                                <td>{{ patient.age }}</td>
+                                <td>
+                                    <span class="badge {{ patient.gender|lower if patient.gender else '' }}">
+                                        {{ patient.gender if patient.gender else '-' }}
+                                    </span>
+                                </td>
+                                <td>{{ patient.phone }}</td>
+                                <td>{{ patient.email if patient.email else '-' }}</td>
+                                <td>{{ patient.city if patient.city else '-' }}</td>
+                                <td>{{ patient.last_visit }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state">
+                        <div class="empty-state-icon">👥</div>
+                        <h4>No patients registered yet</h4>
+                        <p>Patient records will appear here when they submit their information during diagnosis</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+
+        <!-- Hospitals Tab -->
+        <div id="hospitals" class="tab-content">
+            <section class="section-card">
+                <div class="section-header">
+                    <h3>🏥 Registered Hospitals</h3>
+                </div>
+                {% if hospitals and hospitals|length > 0 %}
+                <div class="hospitals-grid">
+                    {% for hospital in hospitals %}
+                    <div class="hospital-card">
+                        <h4>{{ hospital.name }}</h4>
+                        <p><strong>Specialization:</strong> {{ hospital.specialization }}</p>
+                        <p><strong>Address:</strong> {{ hospital.address }}</p>
+                        <p><strong>Timings:</strong> {{ hospital.timings }}</p>
+                        <p class="rating">⭐ {{ hospital.rating }}/5</p>
+                        {% if hospital.available %}
+                        <span class="badge available">Available</span>
+                        {% endif %}
+                        <div class="contact-info">
+                            <p>📞 <a href="tel:{{ hospital.phone }}">{{ hospital.phone }}</a></p>
+                            <p>✉️ <a href="mailto:{{ hospital.email }}">{{ hospital.email }}</a></p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">🏥</div>
+                    <h4>No hospitals registered yet</h4>
+                    <p>Hospital data will appear here once added</p>
+                </div>
+                {% endif %}
+            </section>
+        </div>
+
+        <!-- Footer -->
+        <footer class="dashboard-footer">
+            <p>Skin Disease Classifier Dashboard | Powered by <a href="/">AI Diagnosis System</a></p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <span class="toast-icon"></span>
+        <span class="toast-message"></span>
+    </div>
+
+    <script>
+        // Tab Navigation
+        function showTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Filter table
+        function filterTable(tableId, query) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+            const lowerQuery = query.toLowerCase();
+
+            for (let row of rows) {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(lowerQuery) ? '' : 'none';
+            }
+        }
+
+        // Chart.js configuration
+        Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
+        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
+
+        // Distribution Chart
+        const distributionCtx = document.getElementById('distributionChart').getContext('2d');
+        new Chart(distributionCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Normal Skin', 'Psoriasis', 'Ringworm', 'Acne'],
+                datasets: [{
+                    data: [{{ stats.normal }}, {{ stats.psoriasis }}, {{ stats.ringworm }}, {{ stats.acne }}],
+            backgroundColor: [
+            'rgba(56, 239, 125, 0.8)',
+            'rgba(242, 201, 76, 0.8)',
+            'rgba(244, 92, 67, 0.8)',
+            'rgba(79, 172, 254, 0.8)'
+        ],
+            borderColor: ['#38ef7d', '#f2c94c', '#f45c43', '#4facfe'],
+            borderWidth: 2
+                }]
+            },
+            options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { padding: 15, font: { size: 12 } }
+                }
+            },
+            cutout: '60%'
+        }
+        });
+
+        // Timeline Chart
+        const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+        const timelineData = {{ timeline_data | tojson | safe }};
+
+        new Chart(timelineCtx, {
+            type: 'line',
+            data: {
+                labels: timelineData.labels || [],
+                datasets: [{
+                    label: 'Predictions',
+                    data: timelineData.data || [],
+                    fill: true,
+                    backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                    borderColor: '#667eea',
+                    tension: 0.4,
+                    borderWidth: 3,
+                    pointBackgroundColor: '#764ba2',
+                    pointRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+
+        // Refresh data
+        async function refreshData() {
+            showToast('Refreshing data...', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+
+        // Toast notification
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.querySelector('.toast-message').textContent = message;
+            toast.querySelector('.toast-icon').textContent = type === 'success' ? '✅' : '❌';
+            toast.className = 'toast ' + type + ' show';
+
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+
+</html>
