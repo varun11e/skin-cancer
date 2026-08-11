@@ -25,11 +25,10 @@ skin-cancer/
 ├── requirements.txt    # Python dependencies
 ├── .env.example        # Safe configuration template
 ├── .gitignore          # Local/generated files excluded from Git
-├── README.md
-└── frontend files       # React/Vite UI
+└── README.md
 ```
 
-The older root-level Flask files are retained for compatibility with the existing prototype. New backend work should go under `backend/`.
+The older root-level Flask files are retained for the existing prototype. New backend work should go under `backend/`; they should not be extended with new features.
 
 ## Security improvements
 
@@ -96,7 +95,7 @@ The trained `.pth` file is intentionally not stored in Git. Train a model locall
 From the repository root:
 
 ```bash
-python backend/app.py
+python -m backend.app
 ```
 
 The API listens on port `5000` by default.
@@ -175,7 +174,3 @@ Do not report validation accuracy as final model performance. For a serious eval
 5. Use macro metrics for multi-class evaluation so minority classes are not hidden by overall accuracy.
 6. Treat low-confidence predictions as uncertain; do not automatically convert them to `NORMAL_SKIN`.
 7. Do not use this model as a standalone medical diagnostic system.
-
-## License
-
-Add the project's intended license before public distribution.
