@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+venv
+node_modules
+dist
+models
+*.pth
+*.pt
+*.onnx
+.env
+__pycache__
+*.pyc
+.pytest_cache
+mongodb-data
+*.log
+dataset

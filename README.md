@@ -1,108 +1,127 @@
 # DermaAI — Skin Disease Classification
 
-DermaAI is a prototype web application that uses a PyTorch EfficientNet-B3 image-classification model to classify four skin-image categories:
+DermaAI is an educational/research web application that uses a PyTorch EfficientNet-B3 image-classification model to classify four skin-image categories:
 
 - `NORMAL_SKIN`
 - `PSORIASIS`
 - `Ringworm`
 - `acne`
 
-It combines a Flask API, MongoDB persistence, JWT authentication, and a React/Vite frontend.
+It combines a Flask API, MongoDB persistence, JWT authentication, bcrypt password hashing, rate limiting, and a React/Vite frontend.
 
-> **Medical disclaimer:** This project is for educational/research purposes. A model prediction is not a medical diagnosis and should not replace assessment by a qualified clinician.
+> **Medical disclaimer:** This project is for educational/research purposes. A model prediction is not a medical diagnosis and must not replace assessment by a qualified clinician.
 
 ## Architecture
 
 ```text
-skin-cancer/
-├── backend/
-│   ├── app.py          # Flask API and routes
-│   ├── config.py       # Environment-driven configuration
-│   ├── database.py     # MongoDB connection wrapper
-│   └── model.py        # Model loading and image preprocessing
-├── train.py            # Training with validation metrics
-├── evaluate.py         # Held-out test-set evaluation
-├── requirements.txt    # Python dependencies
-├── .env.example        # Safe configuration template
-├── .gitignore          # Local/generated files excluded from Git
-└── README.md
+Browser
+  │
+  ▼
+React/Vite frontend ──────────────┐
+                                  │ same-origin /api
+                                  ▼
+                         Flask + Gunicorn API
+                         ├── JWT authentication
+                         ├── rate limiting
+                         ├── image validation
+                         ├── EfficientNet-B3 inference
+                         └── MongoDB access
+                                  │
+                                  ▼
+                              MongoDB Atlas
+
+Model artifact (.pth)
+  └── downloaded at startup from MODEL_URL and verified with MODEL_SHA256
 ```
 
-The older root-level Flask files are retained for the existing prototype. New backend work should go under `backend/`; they should not be extended with new features.
+The production container builds the React frontend and serves it from Flask, so the application can run as a single web service.
 
-## Security improvements
+## Repository structure
 
-- JWT secret is loaded from the environment rather than committed source code.
-- The application refuses to start without a sufficiently long JWT secret.
-- CORS is restricted to configured origins instead of allowing every origin.
-- Prediction, dashboard, and hospital endpoints require authentication.
-- Uploaded files are validated as images before inference.
-- API errors return a generic message instead of exposing internal exception details.
-- Request limits and coordinate validation reduce accidental or abusive inputs.
-- Patient records are associated with the authenticated user for prediction records.
-- `.env` and model artifacts are excluded from Git.
+```text
+skin-cancer/
+├── backend/
+│   ├── app.py
+│   ├── config.py
+│   ├── database.py
+│   └── model.py
+├── App.jsx
+├── index.css
+├── main.jsx
+├── index.html
+├── package.json
+├── vite.config.js
+├── train.py
+├── evaluate.py
+├── requirements.txt
+├── Dockerfile
+├── railway.toml
+├── .env.example
+├── .dockerignore
+└── .github/workflows/python-checks.yml
+```
 
-For production use, add rate limiting, stronger authorization/role controls, secure HTTPS deployment, audit logging, encryption and an appropriate privacy/data-retention policy before storing real patient information.
+## Production improvements
 
-## Setup
+- JWT secrets are environment-only and require at least 32 characters.
+- Passwords are hashed with bcrypt.
+- Dashboard and prediction records are scoped to the authenticated user.
+- CORS is configurable instead of hardcoded to allow every origin.
+- Request bodies are limited to a configurable image size.
+- Uploaded files must parse as valid images before inference.
+- Login, registration, prediction, and global request rates are limited.
+- Security response headers are added by default.
+- MongoDB indexes are created for common queries.
+- MongoDB connection timeouts are configured.
+- Model artifacts stay outside Git and can be downloaded from a configured artifact URL.
+- Model downloads can be verified using SHA-256.
+- Gunicorn is used instead of Flask's development server.
+- The frontend and API are packaged into one production container.
+- Railway health checks use `/health`.
+- CI compiles Python, builds the frontend, and builds the production Docker image.
 
-### 1. Create a virtual environment
+## Local development
 
-Windows:
+### Backend
 
 ```bash
 python -m venv .venv
+# Windows
 .venv\\Scripts\\activate
-```
-
-Linux/macOS:
-
-```bash
-python3 -m venv .venv
+# Linux/macOS
 source .venv/bin/activate
-```
 
-### 2. Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure environment variables
+Create `.env` from `.env.example` and set a local MongoDB URI and JWT secret.
 
-Copy `.env.example` to `.env` and set a unique secret:
+You also need the trained model:
 
 ```text
-JWT_SECRET_KEY=<at-least-32-random-characters>
-MONGO_URI=mongodb://localhost:27017/
-MONGO_DB_NAME=skin_disease_classifier
-MODEL_PATH=skin_disease_model.pth
-CORS_ORIGINS=http://localhost:5173
+MODEL_PATH=models/skin_disease_model.pth
 ```
 
-Do not commit `.env`.
+or configure `MODEL_URL` to a trusted model artifact URL.
 
-### 4. MongoDB
-
-Run a local MongoDB instance or provide a reachable MongoDB URI through `MONGO_URI`.
-
-### 5. Model
-
-The trained `.pth` file is intentionally not stored in Git. Train a model locally or obtain the approved model artifact separately and set `MODEL_PATH` accordingly.
-
-### 6. Start the API
-
-From the repository root:
+Start the API:
 
 ```bash
 python -m backend.app
 ```
 
-The API listens on port `5000` by default.
+### Frontend
 
-## Dataset structure
+```bash
+npm install
+npm run dev
+```
 
-Training requires a **separate validation set**. The training script deliberately refuses to use the training set as validation data because that would make the validation result misleading.
+The Vite development server runs on its normal local port. Set `VITE_API_URL` only when the API is hosted separately; for the production container, leave it empty so requests use the same origin.
+
+## Training
+
+Training requires separate train and validation datasets:
 
 ```text
 dataset/
@@ -123,54 +142,122 @@ dataset/
     └── acne/
 ```
 
-The class order must match the four labels above.
-
-## Training
+Train:
 
 ```bash
 python train.py --data_dir ./dataset --epochs 10 --batch_size 16 --lr 0.0001 --save_path ./models/skin_disease_model.pth
 ```
 
-The training script selects the best checkpoint using **macro-F1**, rather than accuracy alone. It records:
+The best checkpoint is selected by macro-F1. Accuracy, macro precision, macro recall, macro-F1, a confusion matrix, and a per-class classification report are written to the metrics JSON file.
 
-- Accuracy
-- Macro precision
-- Macro recall
-- Macro F1
-- Confusion matrix
-- Per-class classification report
-
-The metrics are written beside the model as a `.metrics.json` file.
-
-## Held-out evaluation
-
-Use data that was not used for training or model selection:
+Evaluate only on a held-out test set:
 
 ```bash
 python evaluate.py --data_dir ./dataset/test --model_path ./models/skin_disease_model.pth --output evaluation.metrics.json
 ```
 
-Do not report validation accuracy as final model performance. For a serious evaluation, report the held-out test metrics and inspect the per-class confusion matrix.
+Do not report validation accuracy as final model performance.
 
-## API overview
+## API
 
 | Method | Endpoint | Auth |
 |---|---|---|
+| GET | `/health` | No |
+| GET | `/api` | No |
 | POST | `/api/auth/register` | No |
 | POST | `/api/auth/login` | No |
 | GET | `/api/user/profile` | JWT |
-| POST | `/api/predict` | JWT |
 | GET | `/api/dashboard/stats` | JWT |
 | GET | `/api/dashboard/recent` | JWT |
+| POST | `/api/predict` | JWT |
 | GET | `/api/hospitals/nearby` | JWT |
 | GET | `/api/hospitals/search-city` | JWT |
 
-## Project quality rules
+## Deployment — Railway + MongoDB Atlas
 
-1. Never commit virtual environments or generated executables.
-2. Never commit `.env` files or secrets.
-3. Keep model weights outside Git unless there is a deliberate artifact-storage strategy.
-4. Keep train, validation and test data separate.
-5. Use macro metrics for multi-class evaluation so minority classes are not hidden by overall accuracy.
-6. Treat low-confidence predictions as uncertain; do not automatically convert them to `NORMAL_SKIN`.
-7. Do not use this model as a standalone medical diagnostic system.
+Railway is the recommended first deployment target for this repository because the application is containerized, needs more memory than a tiny serverless function, and Railway supports Dockerfile deployments, configurable health checks, and vertical scaling. The included `railway.toml` is ready for a GitHub-connected service.
+
+### 1. Prepare the model artifact
+
+Do **not** commit `skin_disease_model.pth`; `.gitignore` deliberately excludes model weights.
+
+Upload the approved trained model to trusted object storage or an artifact host that provides a stable HTTPS URL. Set:
+
+```text
+MODEL_URL=https://your-trusted-host.example/skin_disease_model.pth
+MODEL_SHA256=<64-character-sha256>
+```
+
+The application downloads the artifact only when it is missing and verifies the checksum before loading it.
+
+### 2. Create MongoDB Atlas
+
+Create a MongoDB deployment and database user, restrict network access appropriately, and obtain its connection string.
+
+Set:
+
+```text
+MONGO_URI=mongodb+srv://...
+MONGO_DB_NAME=skin_disease_classifier
+```
+
+### 3. Create the Railway service
+
+Connect this GitHub repository to a new Railway service. Railway will detect `Dockerfile` and `railway.toml`.
+
+Set these service variables:
+
+```text
+JWT_SECRET_KEY=<at-least-32-random-characters>
+MONGO_URI=<your-atlas-connection-string>
+MONGO_DB_NAME=skin_disease_classifier
+MODEL_URL=<your-model-url>
+MODEL_SHA256=<your-model-sha256>
+MAX_UPLOAD_MB=8
+DISEASE_CONFIDENCE_THRESHOLD=0.55
+JWT_ACCESS_TOKEN_HOURS=24
+RATELIMIT_STORAGE_URI=memory://
+FLASK_DEBUG=false
+```
+
+Do not set a fixed `PORT`; Railway supplies it.
+
+### 4. Resource recommendation
+
+EfficientNet-B3 has about 12.2 million parameters and a roughly 47 MB reference weight file before accounting for the Python/PyTorch runtime and application memory. Use a paid Railway service with sufficient RAM rather than a 0.5 GB hobby allocation for reliable production inference.
+
+Start with one replica and at least 2 GB RAM. Increase RAM/CPU after observing real inference latency and memory usage.
+
+### 5. Health check
+
+Railway should use:
+
+```text
+/health
+```
+
+The endpoint verifies MongoDB connectivity and confirms that the model is loaded.
+
+### 6. Domain and HTTPS
+
+Use the Railway-generated domain for initial testing. Add a custom domain after the application passes production checks. Railway terminates HTTPS at the platform edge.
+
+## Production checklist
+
+Before using real patient information:
+
+- [ ] Use only synthetic/test patient data until a formal privacy and security review is complete.
+- [ ] Store the model in trusted artifact storage and set `MODEL_SHA256`.
+- [ ] Use a strong random `JWT_SECRET_KEY`.
+- [ ] Restrict MongoDB Atlas network access.
+- [ ] Configure a production rate-limit backend such as Redis when running multiple replicas.
+- [ ] Set `CORS_ORIGINS` if the frontend is hosted separately.
+- [ ] Configure database backups and test restoration.
+- [ ] Add monitoring and alerting.
+- [ ] Add automated API/integration tests before enabling continuous production deploys.
+- [ ] Review retention, deletion, encryption, access-control, and audit requirements for patient information.
+- [ ] Obtain appropriate clinical validation before making any medical claim.
+
+## Security and privacy
+
+This application is not designed to store real patient data without additional controls. A production healthcare deployment should add appropriate encryption, authorization/roles, audit logging, retention/deletion policies, threat modeling, monitoring, and regulatory/privacy review.

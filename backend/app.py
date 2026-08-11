@@ -1,12 +1,17 @@
 import math
-from datetime import datetime
+import re
+from datetime import datetime, timezone
+from pathlib import Path
 
 import torch
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from PIL import Image, UnidentifiedImageError
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import Config
 from .database import Database
@@ -14,15 +19,29 @@ from .model import CLASS_LABELS, TRANSFORM, load_model
 
 Config.validate()
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIST = BASE_DIR / "dist"
+
 app = Flask(__name__)
-app.config["JWT_SECRET_KEY"] = Config.JWT_SECRET_KEY
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = Config.JWT_ACCESS_TOKEN_EXPIRES
-CORS(app, origins=Config.CORS_ORIGINS)
+app.config.update(
+    JWT_SECRET_KEY=Config.JWT_SECRET_KEY,
+    JWT_ACCESS_TOKEN_EXPIRES=Config.JWT_ACCESS_TOKEN_EXPIRES,
+    MAX_CONTENT_LENGTH=Config.MAX_UPLOAD_MB * 1024 * 1024,
+    RATELIMIT_STORAGE_URI=Config.RATELIMIT_STORAGE_URI,
+)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+if Config.CORS_ORIGINS:
+    CORS(app, origins=Config.CORS_ORIGINS, allow_headers=["Content-Type", "Authorization"])
+else:
+    CORS(app, allow_headers=["Content-Type", "Authorization"])
 
 jwt = JWTManager(app)
 bcrypt = Bcrypt(app)
+limiter = Limiter(key_func=get_remote_address, app=app, default_limits=["120 per minute"])
+
 database = Database(Config.MONGO_URI, Config.DB_NAME)
-model = load_model(Config.MODEL_PATH)
+model = load_model(Config.MODEL_PATH, Config.MODEL_URL, Config.MODEL_SHA256)
 
 DEFAULT_HOSPITALS = [
     {"name": "Apollo Hospitals", "specialization": "Dermatology & Skin Care", "address": "Jubilee Hills, Hyderabad", "phone": "+91-40-23607777", "email": "info@apollohospitals.com", "rating": 4.8, "available": True, "timings": "24/7", "city": "Hyderabad", "lat": 17.4265, "lon": 78.4120},
@@ -38,6 +57,8 @@ TIPS = {
     "Ringworm": ["Keep the area clean and dry", "Avoid sharing towels", "Consult a healthcare professional"],
     "acne": ["Cleanse gently", "Use non-comedogenic products", "Avoid picking at lesions"],
 }
+
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,64}$")
 
 
 def error(message: str, status: int):
@@ -65,37 +86,61 @@ def serialize_prediction(doc):
     return doc
 
 
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
+    if request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+@app.errorhandler(413)
+def payload_too_large(_exc):
+    return error(f"Uploaded payload exceeds the {Config.MAX_UPLOAD_MB} MB limit.", 413)
+
+
 @app.errorhandler(Exception)
 def handle_unexpected_error(exc):
     app.logger.exception("Unhandled server error")
     return error("An internal server error occurred.", 500)
 
 
-@app.get("/")
-def index():
-    return jsonify({"status": "ok", "message": "DermaAI Backend API is running."})
+@app.get("/health")
+def health():
+    database.client.admin.command("ping")
+    return jsonify({"status": "ok", "service": "dermaai", "model_loaded": model is not None}), 200
+
+
+@app.get("/api")
+def api_info():
+    return jsonify({"name": "DermaAI API", "version": "1.0.0", "status": "ok"})
 
 
 @app.post("/api/auth/register")
+@limiter.limit("5 per hour")
 def register():
     data = request.get_json(silent=True) or {}
     username = str(data.get("username", "")).strip()
     password = data.get("password", "")
-    if len(username) < 3 or len(username) > 64:
-        return error("Username must contain 3-64 characters.", 400)
-    if not isinstance(password, str) or len(password) < 8:
-        return error("Password must contain at least 8 characters.", 400)
+    if not USERNAME_RE.fullmatch(username):
+        return error("Username must be 3-64 characters and contain only letters, numbers, _, ., or -.", 400)
+    if not isinstance(password, str) or len(password) < 12 or len(password) > 128:
+        return error("Password must contain 12-128 characters.", 400)
     if database.users.find_one({"username": username}):
         return error("User already exists.", 409)
     database.users.insert_one({
         "username": username,
         "password": bcrypt.generate_password_hash(password).decode("utf-8"),
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
     })
     return jsonify({"message": "User registered successfully."}), 201
 
 
 @app.post("/api/auth/login")
+@limiter.limit("10 per minute")
 def login():
     data = request.get_json(silent=True) or {}
     username = str(data.get("username", "")).strip()
@@ -142,6 +187,7 @@ def dashboard_recent():
 
 @app.post("/api/predict")
 @jwt_required()
+@limiter.limit("30 per minute")
 def predict():
     if "image" not in request.files:
         return error("No image provided.", 400)
@@ -154,7 +200,7 @@ def predict():
     except (UnidentifiedImageError, OSError):
         return error("The uploaded file is not a valid image.", 400)
 
-    with torch.no_grad():
+    with torch.inference_mode():
         probabilities = torch.softmax(model(tensor), dim=1)[0]
 
     predicted_index = int(torch.argmax(probabilities).item())
@@ -168,27 +214,35 @@ def predict():
     all_probabilities.sort(key=lambda item: item["probability"], reverse=True)
 
     username = get_jwt_identity()
-    patient_info = {
-        "name": request.form.get("patientName", "").strip(),
-        "age": request.form.get("patientAge", "").strip(),
-        "phone": request.form.get("patientPhone", "").strip(),
-    }
+    patient_name = request.form.get("patientName", "").strip()[:100]
+    patient_age = request.form.get("patientAge", "").strip()
+    patient_phone = request.form.get("patientPhone", "").strip()[:30]
+    if patient_age:
+        try:
+            age = int(patient_age)
+            if not 0 <= age <= 120:
+                raise ValueError
+        except ValueError:
+            return error("Patient age must be a number between 0 and 120.", 400)
+
+    now = datetime.now(timezone.utc)
+    patient_info = {"name": patient_name, "age": patient_age, "phone": patient_phone}
     database.predictions.insert_one({
         "username": username,
         "prediction": predicted_class,
         "confidence": round(confidence * 100, 2),
         "uncertain": uncertain,
         "all_probabilities": all_probabilities,
-        "timestamp": datetime.utcnow(),
+        "timestamp": now,
         "patient": patient_info,
     })
 
-    if patient_info["name"] or patient_info["phone"]:
+    if patient_name or patient_phone:
         query = {"username": username}
-        query["phone" if patient_info["phone"] else "name"] = patient_info["phone"] or patient_info["name"]
+        query["phone" if patient_phone else "name"] = patient_phone or patient_name
         database.patients.update_one(
             query,
-            {"$set": {"username": username, **patient_info, "last_visit": datetime.utcnow()}, "$setOnInsert": {"created_at": datetime.utcnow()}},
+            {"$set": {"username": username, **patient_info, "last_visit": now}, "$setOnInsert": {"created_at": now}},
             upsert=True,
         )
 
@@ -227,12 +281,27 @@ def nearby_hospitals():
 @jwt_required()
 def search_hospitals_by_city():
     city = request.args.get("city", "").strip()
-    if not city or len(city) > 100:
+    if not city or len(city) > 100 or any(char in city for char in "$[]{}()"):
         return error("A valid city name is required.", 400)
-    hospitals = list(database.hospitals.find({"city": {"$regex": f"^{city}$", "$options": "i"}}, {"_id": 0}))
+    hospitals = list(database.hospitals.find({"city": {"$regex": f"^{re.escape(city)}$", "$options": "i"}}, {"_id": 0}))
     if not hospitals:
         hospitals = [h for h in DEFAULT_HOSPITALS if h["city"].lower() == city.lower()]
     return jsonify({"city": city, "hospitals": hospitals[:25]})
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def frontend(path):
+    if path.startswith("api/") or path == "health":
+        return error("Not found.", 404)
+    if FRONTEND_DIST.is_dir():
+        requested = FRONTEND_DIST / path
+        if path and requested.is_file():
+            return send_from_directory(FRONTEND_DIST, path)
+        index = FRONTEND_DIST / "index.html"
+        if index.is_file():
+            return send_from_directory(FRONTEND_DIST, "index.html")
+    return jsonify({"message": "DermaAI API is running. Frontend build is not installed."}), 200
 
 
 if __name__ == "__main__":
