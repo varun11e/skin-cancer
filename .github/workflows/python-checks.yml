@@ -1,17 +1,33 @@
-name: Python checks
+name: Quality checks
 
 on:
   push:
-    branches: ["main", "improve-project-quality"]
+    branches: ["main", "production-readiness"]
   pull_request:
 
 jobs:
-  syntax:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Compile Python sources
         run: python -m compileall -q backend train.py evaluate.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build production Docker image
+        run: docker build --tag dermaai:ci .
