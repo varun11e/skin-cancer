@@ -10,7 +10,6 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
 from PIL import Image, UnidentifiedImageError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -40,7 +39,6 @@ else:
 jwt = JWTManager(app)
 bcrypt = Bcrypt(app)
 limiter = Limiter(key_func=get_remote_address, app=app, default_limits=["120 per minute"])
-csrf = CSRFProtect(app)
 
 database = Database(Config.MONGO_URI, Config.DB_NAME)
 model = load_model(Config.MODEL_PATH, Config.MODEL_URL, Config.MODEL_SHA256)
