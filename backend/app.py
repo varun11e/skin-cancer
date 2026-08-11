@@ -1,7 +1,7 @@
 import math
 from datetime import datetime
-from functools import wraps
 
+import torch
 from flask import Flask, jsonify, request
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
@@ -44,11 +44,6 @@ def error(message: str, status: int):
     return jsonify({"error": message}), status
 
 
-def require_database():
-    if database is None:
-        raise RuntimeError("Database is unavailable")
-
-
 def parse_limit(default: int = 10, maximum: int = 100) -> int:
     value = request.args.get("limit", default, type=int)
     return max(1, min(value, maximum))
@@ -86,14 +81,12 @@ def register():
     data = request.get_json(silent=True) or {}
     username = str(data.get("username", "")).strip()
     password = data.get("password", "")
-
     if len(username) < 3 or len(username) > 64:
         return error("Username must contain 3-64 characters.", 400)
     if not isinstance(password, str) or len(password) < 8:
         return error("Password must contain at least 8 characters.", 400)
     if database.users.find_one({"username": username}):
         return error("User already exists.", 409)
-
     database.users.insert_one({
         "username": username,
         "password": bcrypt.generate_password_hash(password).decode("utf-8"),
@@ -108,10 +101,8 @@ def login():
     username = str(data.get("username", "")).strip()
     password = data.get("password", "")
     user = database.users.find_one({"username": username})
-
     if not user or not isinstance(password, str) or not bcrypt.check_password_hash(user["password"], password):
         return error("Invalid credentials.", 401)
-
     return jsonify({"token": create_access_token(identity=username), "username": username})
 
 
@@ -147,11 +138,9 @@ def dashboard_recent():
 def predict():
     if "image" not in request.files:
         return error("No image provided.", 400)
-
     file = request.files["image"]
     if not file.filename:
         return error("No image selected.", 400)
-
     try:
         image = Image.open(file.stream).convert("RGB")
         tensor = TRANSFORM(image).unsqueeze(0)
@@ -164,9 +153,6 @@ def predict():
     predicted_index = int(torch.argmax(probabilities).item())
     predicted_class = CLASS_LABELS[predicted_index]
     confidence = float(probabilities[predicted_index].item())
-
-    # Do not silently relabel a low-confidence disease as NORMAL_SKIN.
-    # Instead, report the model result and let the client communicate uncertainty.
     uncertain = confidence < Config.DISEASE_CONFIDENCE_THRESHOLD
     all_probabilities = [
         {"label": label, "probability": round(float(probabilities[i].item()) * 100, 2)}
@@ -180,7 +166,6 @@ def predict():
         "age": request.form.get("patientAge", "").strip(),
         "phone": request.form.get("patientPhone", "").strip(),
     }
-
     database.predictions.insert_one({
         "username": username,
         "prediction": predicted_class,
@@ -217,7 +202,6 @@ def nearby_hospitals():
         lon = float(request.args["lon"])
     except (KeyError, TypeError, ValueError):
         return error("Valid latitude and longitude are required.", 400)
-
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return error("Latitude or longitude is outside the valid range.", 400)
 
@@ -237,7 +221,6 @@ def search_hospitals_by_city():
     city = request.args.get("city", "").strip()
     if not city or len(city) > 100:
         return error("A valid city name is required.", 400)
-
     hospitals = list(database.hospitals.find({"city": {"$regex": f"^{city}$", "$options": "i"}}, {"_id": 0}))
     if not hospitals:
         hospitals = [h for h in DEFAULT_HOSPITALS if h["city"].lower() == city.lower()]
