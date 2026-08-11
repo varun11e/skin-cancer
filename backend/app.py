@@ -8,9 +8,9 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 from PIL import Image, UnidentifiedImageError
 
-from config import Config
-from database import Database
-from model import CLASS_LABELS, TRANSFORM, load_model
+from .config import Config
+from .database import Database
+from .model import CLASS_LABELS, TRANSFORM, load_model
 
 Config.validate()
 
