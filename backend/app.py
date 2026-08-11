@@ -115,13 +115,15 @@ def profile():
 @app.get("/api/dashboard/stats")
 @jwt_required()
 def dashboard_stats():
+    username = get_jwt_identity()
+    scope = {"username": username}
     return jsonify({
-        "total": database.predictions.count_documents({}),
-        "normal": database.predictions.count_documents({"prediction": "NORMAL_SKIN"}),
-        "psoriasis": database.predictions.count_documents({"prediction": "PSORIASIS"}),
-        "ringworm": database.predictions.count_documents({"prediction": "Ringworm"}),
-        "acne": database.predictions.count_documents({"prediction": "acne"}),
-        "patients_count": database.patients.count_documents({}),
+        "total": database.predictions.count_documents(scope),
+        "normal": database.predictions.count_documents({**scope, "prediction": "NORMAL_SKIN"}),
+        "psoriasis": database.predictions.count_documents({**scope, "prediction": "PSORIASIS"}),
+        "ringworm": database.predictions.count_documents({**scope, "prediction": "Ringworm"}),
+        "acne": database.predictions.count_documents({**scope, "prediction": "acne"}),
+        "patients_count": database.patients.count_documents({"username": username}),
         "hospitals_count": database.hospitals.count_documents({}),
     })
 
@@ -129,7 +131,12 @@ def dashboard_stats():
 @app.get("/api/dashboard/recent")
 @jwt_required()
 def dashboard_recent():
-    predictions = list(database.predictions.find({}, {"_id": 0}).sort("timestamp", -1).limit(parse_limit()))
+    username = get_jwt_identity()
+    predictions = list(
+        database.predictions.find({"username": username}, {"_id": 0})
+        .sort("timestamp", -1)
+        .limit(parse_limit())
+    )
     return jsonify([serialize_prediction(p) for p in predictions])
 
 
@@ -177,10 +184,11 @@ def predict():
     })
 
     if patient_info["name"] or patient_info["phone"]:
-        query = {"phone": patient_info["phone"]} if patient_info["phone"] else {"name": patient_info["name"]}
+        query = {"username": username}
+        query["phone" if patient_info["phone"] else "name"] = patient_info["phone"] or patient_info["name"]
         database.patients.update_one(
             query,
-            {"$set": {**patient_info, "last_visit": datetime.utcnow()}, "$setOnInsert": {"created_at": datetime.utcnow()}},
+            {"$set": {"username": username, **patient_info, "last_visit": datetime.utcnow()}, "$setOnInsert": {"created_at": datetime.utcnow()}},
             upsert=True,
         )
 
