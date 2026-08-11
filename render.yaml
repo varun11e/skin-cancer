@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: skin-cancer-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: MONGO_DB_NAME
+        value: skin_disease_classifier
+      - key: MODEL_PATH
+        value: skin_disease_model.pth
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FLASK_DEBUG
+        value: "false"
+      - key: PORT
+        value: "10000"
