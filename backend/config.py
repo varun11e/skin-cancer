@@ -1,6 +1,10 @@
 import os
 from datetime import timedelta
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
